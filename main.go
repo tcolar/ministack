@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"os"
 	"sync"
 
@@ -29,7 +30,10 @@ func main() {
 		config.Sns.Host = host
 	}
 	var wg sync.WaitGroup
-	store := storage.NewBoltStorage()
+	store, err := storage.NewBoltStorage()
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer store.Close()
 	if config.Sns.Enabled {
 		//wg.Add(1)

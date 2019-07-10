@@ -3,7 +3,8 @@ package sqs
 import "fmt"
 
 const (
-	DummyRequestId = "00000000-0000-0000-0000-000000000000"
+	// DummyRequestID to be used in aws like responses
+	DummyRequestID = "00000000-0000-0000-0000-000000000000"
 )
 
 func NewErrorResponse(errType string, errCode string) *ErrorResponse {
@@ -13,7 +14,7 @@ func NewErrorResponse(errType string, errCode string) *ErrorResponse {
 			Code:    errCode,
 			Message: fmt.Sprintf("%s; ; see the SQS docs.", errCode),
 		},
-		RequestId: DummyRequestId,
+		RequestId: DummyRequestID,
 	}
 }
 

@@ -9,11 +9,13 @@ import (
 	"github.com/tcolar/ministack/storage"
 )
 
+// Server creates the SQS server impl
 type Server struct {
 	Config *SqsConfig
 	Store  storage.Store
 }
 
+// NewServer craetes a new SQS server backed by a given storage impl
 func NewServer(config *SqsConfig, store storage.Store) *Server {
 	return &Server{
 		Config: config,
@@ -21,6 +23,7 @@ func NewServer(config *SqsConfig, store storage.Store) *Server {
 	}
 }
 
+// Start sarts the server (runs forver)
 func (s *Server) Start() {
 	router := gin.Default()
 	s.addRoutes(router)
@@ -49,6 +52,7 @@ func (s *Server) home(c *gin.Context) {
 	//case "GetQueueAttributes":
 	case "GetQueueUrl":
 	case "ListQueues":
+		s.listQueues(c)
 	case "PurgeQueue":
 	case "ReceiveMessage":
 	case "SendMessage":
@@ -78,10 +82,21 @@ func (s *Server) createQueue(c *gin.Context) {
 			QueueUrl: fmt.Sprintf("http://%s:%d/queue/%s", s.Config.Host, s.Config.Port, name),
 		},
 		ResponseMetadata: ResponseMetadata{
-			RequestId: DummyRequestId,
+			RequestId: DummyRequestID,
 		},
 	}
 	c.XML(200, response)
+}
+
+func (s *Server) listQueues(c *gin.Context) {
+	list, err := s.Store.ListQueues()
+	if err != nil {
+		c.XML(http.StatusInternalServerError, NewErrorResponse("Sender", err.Error()))
+		return
+	}
+	for _, queue := range list.Queues {
+		log.Printf("Queue: %s", queue)
+	}
 }
 
 func (s *Server) sendBadRequest(c *gin.Context) {

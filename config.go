@@ -5,6 +5,7 @@ import (
 	"github.com/tcolar/ministack/sqs"
 )
 
+// Config for ministack
 type Config struct {
 	Sns sns.SnsConfig
 	Sqs sqs.SqsConfig
