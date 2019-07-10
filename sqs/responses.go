@@ -42,3 +42,27 @@ type CreateQueueResult struct {
 type ResponseMetadata struct {
 	RequestId string
 }
+
+func NewListQueueResponse(config *Config, queues []string) *ListQueuesResponse {
+	queueUrls := []string{}
+	for _, queue := range queues {
+		queueUrls = append(queueUrls, fmt.Sprintf("http://%s:%d/queue/%s", config.Host, config.Port, queue))
+	}
+	return &ListQueuesResponse{
+		ListQueuesResult: ListQueuesResult{
+			QueueUrl: queueUrls,
+		},
+		ResponseMetadata: ResponseMetadata{
+			RequestId: DummyRequestID,
+		},
+	}
+}
+
+type ListQueuesResponse struct {
+	ListQueuesResult ListQueuesResult
+	ResponseMetadata ResponseMetadata
+}
+
+type ListQueuesResult struct {
+	QueueUrl []string
+}

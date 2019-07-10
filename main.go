@@ -1,36 +1,19 @@
 package main
 
 import (
+	"flag"
 	"log"
-	"os"
 	"sync"
 
-	"github.com/tcolar/ministack/sns"
 	"github.com/tcolar/ministack/sqs"
 	"github.com/tcolar/ministack/storage"
 )
 
-var config = Config{
-	Sns: sns.SnsConfig{
-		Enabled: false,
-		Port:    3000,
-		Host:    "localhost",
-	},
-	Sqs: sqs.SqsConfig{
-		Enabled: true,
-		Port:    3001,
-		Host:    "localhost",
-	},
-}
-
 func main() {
-	host := os.Getenv("HOSTNAME_EXTERNAL")
-	if len(host) > 0 {
-		config.Sqs.Host = host
-		config.Sns.Host = host
-	}
+	config := parseConfig()
+
 	var wg sync.WaitGroup
-	store, err := storage.NewBoltStorage()
+	store, err := storage.NewBoltStorage(&config.Storage)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -44,4 +27,24 @@ func main() {
 		go sqs.NewServer(&config.Sqs, store).Start()
 	}
 	wg.Wait()
+}
+
+func parseConfig() *Config {
+	config := &defaultConfig
+	var externalName = flag.String("e", "localhost", "External server name")
+	var debug = flag.Bool("debug", false, "Print debug statements")
+	var snsPort = flag.Int("snsPort", 4575, "SNS Port")
+	var sqsPort = flag.Int("sqsPort", 4576, "SQS Port")
+
+	flag.Parse()
+
+	config.Sqs.Host = *externalName
+	config.Sns.Host = *externalName
+	config.Sns.Port = *snsPort
+	config.Sqs.Port = *sqsPort
+	config.Sqs.Debug = *debug
+	config.Sns.Debug = *debug
+	config.Storage.Debug = *debug
+
+	return config
 }

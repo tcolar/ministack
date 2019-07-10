@@ -11,12 +11,12 @@ import (
 
 // Server creates the SQS server impl
 type Server struct {
-	Config *SqsConfig
+	Config *Config
 	Store  storage.Store
 }
 
 // NewServer craetes a new SQS server backed by a given storage impl
-func NewServer(config *SqsConfig, store storage.Store) *Server {
+func NewServer(config *Config, store storage.Store) *Server {
 	return &Server{
 		Config: config,
 		Store:  store,
@@ -94,9 +94,8 @@ func (s *Server) listQueues(c *gin.Context) {
 		c.XML(http.StatusInternalServerError, NewErrorResponse("Sender", err.Error()))
 		return
 	}
-	for _, queue := range list.Queues {
-		log.Printf("Queue: %s", queue)
-	}
+	response := NewListQueueResponse(s.Config, list.Keys())
+	c.XML(200, response)
 }
 
 func (s *Server) sendBadRequest(c *gin.Context) {

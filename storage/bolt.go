@@ -14,17 +14,19 @@ const queueList = "queue_list"
 
 // BoltStorage is a Storage impl backed by Bolt DB
 type BoltStorage struct {
-	db *bolt.DB
+	db     *bolt.DB
+	config *Config
 }
 
 // NewBoltStorage creates the BoltDB storage instance
-func NewBoltStorage() (Store, error) {
+func NewBoltStorage(config *Config) (Store, error) {
 	db, err := bolt.Open("ministack.db", 0600, nil)
 	if err != nil {
 		return nil, err
 	}
 	store := &BoltStorage{
-		db: db,
+		db:     db,
+		config: config,
 	}
 	err = store.initBuckets()
 	return store, err
@@ -40,7 +42,7 @@ func (s *BoltStorage) CreateQueue(name string) error {
 	bucket := s.toBucketName(name)
 	log.Printf("Creating queue %s (bucket %s)", name, bucket)
 	return s.db.Update(func(tx *bolt.Tx) error {
-		// Upsert a bucket fir the queue
+		// Upsert a bucket for the queue
 		_, err := tx.CreateBucketIfNotExists([]byte(bucket))
 		if err != nil {
 			return err
@@ -48,14 +50,14 @@ func (s *BoltStorage) CreateQueue(name string) error {
 		// Update the list of queues
 		sqs := tx.Bucket([]byte(bucketSqs))
 		rawList := sqs.Get([]byte(queueList))
-		list := QueueList{}
+		list := QueueList{Queues: map[string]Queue{}}
 		if rawList != nil {
 			err = gob.NewDecoder(bytes.NewReader(rawList)).Decode(&list)
 			if err != nil {
 				return err
 			}
 		}
-		list.Queues = append(list.Queues, name)
+		list.Queues[name] = Queue{name}
 		var newRawList bytes.Buffer
 		err = gob.NewEncoder(&newRawList).Encode(list)
 		if err != nil {
@@ -80,7 +82,9 @@ func (s *BoltStorage) ListQueues() (QueueList, error) {
 		}
 		return nil
 	})
-	log.Printf("Queues: %v", list.Queues)
+	if s.config.Debug {
+		s.debug("Queue List size: %v", list.Keys())
+	}
 	return list, err
 }
 
@@ -96,4 +100,10 @@ func (s *BoltStorage) initBuckets() error {
 
 func (s *BoltStorage) toBucketName(queueName string) string {
 	return fmt.Sprintf("_queue_%s", queueName)
+}
+
+func (s *BoltStorage) debug(msg string, args ...interface{}) {
+	if s.config.Debug {
+		log.Printf("DEBUG: %s", fmt.Sprintf(msg, args...))
+	}
 }

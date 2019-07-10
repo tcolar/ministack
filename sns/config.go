@@ -1,7 +1,8 @@
 package sns
 
-type SnsConfig struct {
+type Config struct {
 	Enabled bool
 	Port    int
 	Host    string
+	Debug   bool
 }
