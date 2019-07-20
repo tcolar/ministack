@@ -2,6 +2,8 @@ package sqs
 
 import "fmt"
 
+// https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/sqs-api.pdf
+
 const (
 	// DummyRequestID to be used in aws like responses
 	DummyRequestID = "00000000-0000-0000-0000-000000000000"

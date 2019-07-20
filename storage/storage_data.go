@@ -13,5 +13,14 @@ func (q *QueueList) Keys() []string {
 }
 
 type Queue struct { // TBD
-	Name string
+	Name string // TODO: validate max length 80, alphanum _ and -
+	// TODO ---------
+	//DelaySeconds                  int
+	//MaximumMessageSize            int
+	//MessageRetentionPeriod        int //seconds
+	//ReceiveMessageWaitTimeSeconds int
+	//RedrivePolicy                 string
+	//VisibilityTimeout             int
+	//FifoQueue                     bool // name must end with .fifo
+	//ContentBasedDeduplication     bool // MessageDeduplicationId
 }

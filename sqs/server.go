@@ -90,6 +90,7 @@ func (s *Server) createQueue(c *gin.Context) {
 
 func (s *Server) listQueues(c *gin.Context) {
 	list, err := s.Store.ListQueues()
+	// TODO: optional QueueNamePrefix arg
 	if err != nil {
 		c.XML(http.StatusInternalServerError, NewErrorResponse("Sender", err.Error()))
 		return
