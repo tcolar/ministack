@@ -45,6 +45,8 @@ func (s *Server) home(c *gin.Context) {
 		return
 	}
 	switch action {
+	case "AddPermission":
+		s.AddPermissions(c)
 	case "CreateQueue":
 		s.createQueue(c)
 	case "DeleteMessage":
@@ -63,6 +65,11 @@ func (s *Server) home(c *gin.Context) {
 		c.String(http.StatusNotFound, "The requested resource could not be found.")
 		return
 	}
+}
+
+func (s *Server) addPermissions(c *gin.Context) {
+	log.Println("AddPermission is not implemented - Noop")
+	c.XML(AddPermissionResponse{})
 }
 
 func (s *Server) createQueue(c *gin.Context) {

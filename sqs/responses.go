@@ -9,17 +9,6 @@ const (
 	DummyRequestID = "00000000-0000-0000-0000-000000000000"
 )
 
-func NewErrorResponse(errType string, errCode string) *ErrorResponse {
-	return &ErrorResponse{
-		Error: Error{
-			Type:    errType,
-			Code:    errCode,
-			Message: fmt.Sprintf("%s; ; see the SQS docs.", errCode),
-		},
-		RequestId: DummyRequestID,
-	}
-}
-
 type ErrorResponse struct {
 	Error     Error
 	RequestId string
@@ -30,6 +19,10 @@ type Error struct {
 	Code    string
 	Message string
 	Detail  string
+}
+
+type AddPermissionResponse struct {
+	ResponseMetadata ResponseMetadata
 }
 
 type CreateQueueResponse struct {
@@ -43,6 +36,25 @@ type CreateQueueResult struct {
 
 type ResponseMetadata struct {
 	RequestId string
+}
+
+func NewAddpermissionResponse() {
+	return AddPermissionResponse {
+		ResponseMetadata: ResponseMetadata {
+			RequestId: DummyRequestID,
+		}
+	}
+}
+
+func NewErrorResponse(errType string, errCode string) *ErrorResponse {
+	return &ErrorResponse{
+		Error: Error{
+			Type:    errType,
+			Code:    errCode,
+			Message: fmt.Sprintf("%s; ; see the SQS docs.", errCode),
+		},
+		RequestId: DummyRequestID,
+	}
 }
 
 func NewListQueueResponse(config *Config, queues []string) *ListQueuesResponse {
