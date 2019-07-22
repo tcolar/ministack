@@ -44,22 +44,29 @@ func (s *Server) home(c *gin.Context) {
 		s.sendBadRequest(c)
 		return
 	}
+	// TODO: all the batch stuff
 	switch action {
 	case "AddPermission":
 		s.AddPermissions(c)
+	case "ChangeMessageVisibility":
 	case "CreateQueue":
 		s.createQueue(c)
 	case "DeleteMessage":
-	case "DeleteQueue":
-	//case "GetQueueAttributes":
-	case "GetQueueUrl":
+	case "DeleteQueue": // 1
+	case "GetQueueAttributes":
+	case "GetQueueUrl": // 3
+	case "ListDeadLetterSourceQueues":
 	case "ListQueues":
 		s.listQueues(c)
-	case "PurgeQueue":
-	case "ReceiveMessage":
-	case "SendMessage":
-	// case "SetQueueAttributes":
-	// TODO: batch stuff
+	case "ListQueueTags":
+	case "PurgeQueue": // 2
+	case "ReceiveMessage": // 5
+	case "RemovePermission":
+		s.RemovePermissions(c)
+	case "SendMessage": // 4
+	case "SetQueueAttributes":
+	case "TagQueue":
+	case "UntagQueue":
 	default:
 		log.Printf("Unsupported Action : %s", action)
 		c.String(http.StatusNotFound, "The requested resource could not be found.")
@@ -69,7 +76,7 @@ func (s *Server) home(c *gin.Context) {
 
 func (s *Server) addPermissions(c *gin.Context) {
 	log.Println("AddPermission is not implemented - Noop")
-	c.XML(AddPermissionResponse{})
+	c.XML(200, NewAddPermissionResponse())
 }
 
 func (s *Server) createQueue(c *gin.Context) {
@@ -104,6 +111,11 @@ func (s *Server) listQueues(c *gin.Context) {
 	}
 	response := NewListQueueResponse(s.Config, list.Keys())
 	c.XML(200, response)
+}
+
+func (s *Server) removePermissions(c *gin.Context) {
+	log.Println("RemovePermission is not implemented - Noop")
+	c.XML(200, new RemovePermissionResponse())
 }
 
 func (s *Server) sendBadRequest(c *gin.Context) {

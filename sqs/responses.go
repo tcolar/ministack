@@ -34,15 +34,19 @@ type CreateQueueResult struct {
 	QueueUrl string
 }
 
+type RemovePermissionResponse struct {
+	ResponseMetadata ResponseMetadata
+}
+
 type ResponseMetadata struct {
 	RequestId string
 }
 
-func NewAddpermissionResponse() {
-	return AddPermissionResponse {
-		ResponseMetadata: ResponseMetadata {
+func NewAddPermissionResponse() *AddPermissionResponse {
+	return &AddPermissionResponse{
+		ResponseMetadata: ResponseMetadata{
 			RequestId: DummyRequestID,
-		}
+		},
 	}
 }
 
@@ -66,6 +70,14 @@ func NewListQueueResponse(config *Config, queues []string) *ListQueuesResponse {
 		ListQueuesResult: ListQueuesResult{
 			QueueUrl: queueUrls,
 		},
+		ResponseMetadata: ResponseMetadata{
+			RequestId: DummyRequestID,
+		},
+	}
+}
+
+func NewRemovePermissionResponse() *RemovePermissionResponse {
+	return &RemovePermissionResponse{
 		ResponseMetadata: ResponseMetadata{
 			RequestId: DummyRequestID,
 		},
