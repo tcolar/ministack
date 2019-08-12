@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"unicode"
 
 	"github.com/gin-gonic/gin"
@@ -90,7 +91,7 @@ func (s *Server) createQueue(c *gin.Context) {
 		return
 	}
 	if err := s.validateQueuName(name); err != nil {
-		error := NewErrorResponse("Sender", fmt.Sprintf("Invalid queue name: %s"), err))
+		error := NewErrorResponse("Sender", fmt.Sprintf("Invalid queue name: %s", err))
 		c.XML(http.StatusBadRequest, error)
 		return
 	}
@@ -111,13 +112,24 @@ func (s *Server) createQueue(c *gin.Context) {
 }
 
 func (s *Server) listQueues(c *gin.Context) {
+	prefix := c.Query("QueueNamePrefix")
 	list, err := s.Store.ListQueues()
-	// TODO: optional QueueNamePrefix arg
 	if err != nil {
 		c.XML(http.StatusInternalServerError, NewErrorResponse("Sender", err.Error()))
 		return
 	}
-	response := NewListQueueResponse(s.Config, list.Keys())
+	queues := list.Keys()
+	var filteredList []string
+	if len(prefix) == 0 {
+		filteredList = queues
+	} else {
+		for _, q := range queues {
+			if strings.HasPrefix(q, prefix) {
+				filteredList = append(filteredList, q)
+			}
+		}
+	}
+	response := NewListQueueResponse(s.Config, filteredList)
 	c.XML(200, response)
 }
 
