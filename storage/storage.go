@@ -8,4 +8,6 @@ type Store interface {
 	CreateQueue(name string) error
 	// ListQueues lists the SQS queues
 	ListQueues() (QueueList, error)
+	// Send SQS Message
+	SendMessage(url, body string) (messageID string, err error)
 }

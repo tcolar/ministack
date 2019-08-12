@@ -1,6 +1,7 @@
 package sqs
 
 import (
+	"crypto/md5"
 	"fmt"
 	"log"
 	"net/http"
@@ -47,7 +48,7 @@ func (s *Server) home(c *gin.Context) {
 	// TODO: all the batch stuff
 	switch action {
 	case "AddPermission":
-		s.AddPermissions(c)
+		s.addPermissions(c)
 	case "ChangeMessageVisibility":
 	case "CreateQueue":
 		s.createQueue(c)
@@ -62,8 +63,9 @@ func (s *Server) home(c *gin.Context) {
 	case "PurgeQueue": // 2
 	case "ReceiveMessage": // 5
 	case "RemovePermission":
-		s.RemovePermissions(c)
+		s.removePermissions(c)
 	case "SendMessage": // 4
+		s.sendMessage(c)
 	case "SetQueueAttributes":
 	case "TagQueue":
 	case "UntagQueue":
@@ -115,7 +117,46 @@ func (s *Server) listQueues(c *gin.Context) {
 
 func (s *Server) removePermissions(c *gin.Context) {
 	log.Println("RemovePermission is not implemented - Noop")
-	c.XML(200, new RemovePermissionResponse())
+	c.XML(200, NewRemovePermissionResponse())
+}
+
+func (s *Server) sendMessage(c *gin.Context) {
+	// DelaySeconds
+	// MessageAttribute (Map)
+	// MessageDeduplicationId
+	// MessageGroupId
+	// MessageBody TODOZ CHeck valid bytes
+	// QueueUrl -> required
+	body := c.Query("MessageBody")
+	if len(body) == 0 {
+		error := NewErrorResponse("Sender", "Invalid request: MissingQueryParamRejection(MessageBody)")
+		c.XML(http.StatusBadRequest, error)
+		return
+	}
+	url := c.Query("QueueUrl")
+	if len(url) == 0 {
+		error := NewErrorResponse("Sender", "Invalid request: MissingQueryParamRejection(QueueUrl)")
+		c.XML(http.StatusBadRequest, error)
+		return
+	}
+	messageID, err := s.Store.SendMessage(url, body)
+	if err != nil {
+		c.XML(http.StatusInternalServerError, NewErrorResponse("Sender", err.Error()))
+		return
+	}
+	bodyMd5 := md5.Sum([]byte(body))
+	// attrMd5 := md5.Sum([]byte(body))
+	response := SendMessageResponse{
+		SendMessageResult: SendMessageResult{
+			MD5OfMessageBody:       fmt.Sprintf("%x", bodyMd5),
+			MD5OfMessageAttributes: fmt.Sprintf("%x", "TODO"),
+			MessageID:              messageID,
+		},
+		ResponseMetadata: ResponseMetadata{
+			RequestId: DummyRequestID,
+		},
+	}
+	c.XML(200, response)
 }
 
 func (s *Server) sendBadRequest(c *gin.Context) {

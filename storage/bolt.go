@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"github.com/boltdb/bolt"
+	"github.com/google/uuid"
 )
 
 const bucketSqs = "sqs"
@@ -86,6 +87,16 @@ func (s *BoltStorage) ListQueues() (QueueList, error) {
 		s.debug("Queue List size: %v", list.Keys())
 	}
 	return list, err
+}
+
+// SendMessage sends a SQS message to the queue
+func (s *BoltStorage) SendMessage(url, body string) (messageID string, err error) {
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return "", err
+	}
+	// TODO: find queue matching URL and store
+	return id.String(), nil
 }
 
 func (s *BoltStorage) initBuckets() error {

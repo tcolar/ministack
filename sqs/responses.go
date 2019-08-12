@@ -34,6 +34,17 @@ type CreateQueueResult struct {
 	QueueUrl string
 }
 
+type SendMessageResponse struct {
+	SendMessageResult SendMessageResult
+	ResponseMetadata  ResponseMetadata
+}
+
+type SendMessageResult struct {
+	MD5OfMessageBody       string
+	MD5OfMessageAttributes string
+	MessageID              string
+}
+
 type RemovePermissionResponse struct {
 	ResponseMetadata ResponseMetadata
 }
