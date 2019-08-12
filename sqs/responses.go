@@ -34,6 +34,15 @@ type CreateQueueResult struct {
 	QueueUrl string
 }
 
+type GetQueueUrlResponse struct {
+	GetQueueUrlResult GetQueueResult
+	ResponseMetadata  ResponseMetadata
+}
+
+type GetQueueResult struct {
+	QueueUrl string
+}
+
 type SendMessageResponse struct {
 	SendMessageResult SendMessageResult
 	ResponseMetadata  ResponseMetadata

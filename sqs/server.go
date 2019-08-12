@@ -57,7 +57,8 @@ func (s *Server) home(c *gin.Context) {
 	case "DeleteMessage":
 	case "DeleteQueue": // 1
 	case "GetQueueAttributes":
-	case "GetQueueUrl": // 3
+	case "GetQueueUrl":
+		s.getQueueURL(c)
 	case "ListDeadLetterSourceQueues":
 	case "ListQueues":
 		s.listQueues(c)
@@ -102,7 +103,7 @@ func (s *Server) createQueue(c *gin.Context) {
 	}
 	response := CreateQueueResponse{
 		CreateQueueResult: CreateQueueResult{
-			QueueUrl: fmt.Sprintf("http://%s:%d/queue/%s", s.Config.Host, s.Config.Port, name),
+			QueueUrl: s.toQueueUrl(name),
 		},
 		ResponseMetadata: ResponseMetadata{
 			RequestId: DummyRequestID,
@@ -111,13 +112,40 @@ func (s *Server) createQueue(c *gin.Context) {
 	c.XML(200, response)
 }
 
+func (s *Server) getQueueURL(c *gin.Context) {
+	name := c.Query("QueueName")
+	if len(name) == 0 {
+		error := NewErrorResponse("Sender", "Invalid request: MissingQueryParamRejection(QueueName)")
+		c.XML(http.StatusBadRequest, error)
+		return
+	}
+	queues, err := s.Store.ListQueues()
+	if err != nil {
+		c.XML(http.StatusInternalServerError, NewErrorResponse("Sender", err.Error()))
+		return
+	}
+	if _, ok := queues.Queues[name]; !ok {
+		c.XML(http.StatusInternalServerError, NewErrorResponse("NonExistentQueue", fmt.Sprintf("No such queue : %s", name)))
+	}
+	response := GetQueueUrlResponse{
+		GetQueueUrlResult: GetQueueResult{
+			QueueUrl: s.toQueueUrl(name),
+		},
+		ResponseMetadata: ResponseMetadata{
+			RequestId: DummyRequestID,
+		},
+	}
+	c.XML(200, response)
+	return
+}
+
 func (s *Server) listQueues(c *gin.Context) {
-	prefix := c.Query("QueueNamePrefix")
 	list, err := s.Store.ListQueues()
 	if err != nil {
 		c.XML(http.StatusInternalServerError, NewErrorResponse("Sender", err.Error()))
 		return
 	}
+	prefix := c.Query("QueueNamePrefix")
 	queues := list.Keys()
 	var filteredList []string
 	if len(prefix) == 0 {
@@ -194,4 +222,8 @@ func (s *Server) validateQueuName(name string) error {
 		}
 	}
 	return nil
+}
+
+func (s *Server) toQueueUrl(queueName string) string {
+	return fmt.Sprintf("http://%s:%d/queue/%s", s.Config.Host, s.Config.Port, queueName)
 }
