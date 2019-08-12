@@ -51,27 +51,27 @@ func (s *Server) home(c *gin.Context) {
 	switch action {
 	case "AddPermission":
 		s.addPermissions(c)
-	case "ChangeMessageVisibility":
+	//case "ChangeMessageVisibility":
 	case "CreateQueue":
 		s.createQueue(c)
-	case "DeleteMessage":
-	case "DeleteQueue": // 1
-	case "GetQueueAttributes":
+	//case "DeleteMessage":
+	//case "DeleteQueue":
+	//case "GetQueueAttributes":
 	case "GetQueueUrl":
 		s.getQueueURL(c)
-	case "ListDeadLetterSourceQueues":
+	//case "ListDeadLetterSourceQueues":
 	case "ListQueues":
 		s.listQueues(c)
-	case "ListQueueTags":
-	case "PurgeQueue": // 2
-	case "ReceiveMessage": // 5
+	//case "ListQueueTags":
+	//case "PurgeQueue":
+	//case "ReceiveMessage":
 	case "RemovePermission":
 		s.removePermissions(c)
-	case "SendMessage": // 4
+	case "SendMessage":
 		s.sendMessage(c)
 	case "SetQueueAttributes":
-	case "TagQueue":
-	case "UntagQueue":
+	//case "TagQueue":
+	//case "UntagQueue":
 	default:
 		log.Printf("Unsupported Action : %s", action)
 		c.String(http.StatusNotFound, "The requested resource could not be found.")
@@ -103,7 +103,7 @@ func (s *Server) createQueue(c *gin.Context) {
 	}
 	response := CreateQueueResponse{
 		CreateQueueResult: CreateQueueResult{
-			QueueUrl: s.toQueueUrl(name),
+			QueueUrl: s.toQueueURL(name),
 		},
 		ResponseMetadata: ResponseMetadata{
 			RequestId: DummyRequestID,
@@ -129,7 +129,7 @@ func (s *Server) getQueueURL(c *gin.Context) {
 	}
 	response := GetQueueUrlResponse{
 		GetQueueUrlResult: GetQueueResult{
-			QueueUrl: s.toQueueUrl(name),
+			QueueUrl: s.toQueueURL(name),
 		},
 		ResponseMetadata: ResponseMetadata{
 			RequestId: DummyRequestID,
@@ -185,6 +185,14 @@ func (s *Server) sendMessage(c *gin.Context) {
 		c.XML(http.StatusBadRequest, error)
 		return
 	}
+	for idx, ch := range body {
+		// #x9 | #xA | #xD | #x20 to #xD7FF | #xE000 to #xFFFD | #x10000 to #x10FFFF
+		if !(ch == 0x09 || ch == 0xA || ch == 0xD || (ch >= 0x20 && ch <= 0xD7FF) || (ch >= 0x10000 && ch <= 0x10FFFF)) {
+			error := NewErrorResponse("InvalidMessageContents", fmt.Sprintf("Invalid character %x at index %d", c, idx))
+			c.XML(http.StatusBadRequest, error)
+			return
+		}
+	}
 	messageID, err := s.Store.SendMessage(url, body)
 	if err != nil {
 		c.XML(http.StatusInternalServerError, NewErrorResponse("Sender", err.Error()))
@@ -195,7 +203,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 	response := SendMessageResponse{
 		SendMessageResult: SendMessageResult{
 			MD5OfMessageBody:       fmt.Sprintf("%x", bodyMd5),
-			MD5OfMessageAttributes: fmt.Sprintf("%x", "TODO"),
+			MD5OfMessageAttributes: fmt.Sprintf("%x", "TODO"), // TODO
 			MessageID:              messageID,
 		},
 		ResponseMetadata: ResponseMetadata{
@@ -224,6 +232,6 @@ func (s *Server) validateQueuName(name string) error {
 	return nil
 }
 
-func (s *Server) toQueueUrl(queueName string) string {
+func (s *Server) toQueueURL(queueName string) string {
 	return fmt.Sprintf("http://%s:%d/queue/%s", s.Config.Host, s.Config.Port, queueName)
 }
