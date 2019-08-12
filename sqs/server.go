@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tcolar/ministack/storage"
@@ -88,6 +89,11 @@ func (s *Server) createQueue(c *gin.Context) {
 		c.XML(http.StatusBadRequest, error)
 		return
 	}
+	if err := s.validateQueuName(name); err != nil {
+		error := NewErrorResponse("Sender", fmt.Sprintf("Invalid queue name: %s"), err))
+		c.XML(http.StatusBadRequest, error)
+		return
+	}
 	err := s.Store.CreateQueue(name)
 	if err != nil {
 		c.XML(http.StatusInternalServerError, NewErrorResponse("Sender", err.Error()))
@@ -161,4 +167,19 @@ func (s *Server) sendMessage(c *gin.Context) {
 
 func (s *Server) sendBadRequest(c *gin.Context) {
 	c.String(http.StatusBadRequest, fmt.Sprintf("Unsupported request %s", c.Request.URL.String()))
+}
+
+func (s *Server) validateQueuName(name string) error {
+	if len(name) == 0 {
+		return fmt.Errorf("Queue name cannot be empty")
+	}
+	if len(name) > 80 {
+		return fmt.Errorf("Queue name cannot be longer than 80 chars")
+	}
+	for _, c := range name {
+		if !unicode.IsLetter(c) && !unicode.IsNumber(c) && c != '-' && c != '_' {
+			return fmt.Errorf("Queue name may only contain letters, numbers, -, _")
+		}
+	}
+	return nil
 }
