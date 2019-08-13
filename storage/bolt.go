@@ -7,11 +7,10 @@ import (
 	"log"
 
 	"github.com/boltdb/bolt"
-	"github.com/google/uuid"
 )
 
-const bucketSqs = "sqs"
-const queueList = "queue_list"
+var bucketSqs = []byte("sqs")
+var queueList = []byte("queue_list")
 
 // BoltStorage is a Storage impl backed by Bolt DB
 type BoltStorage struct {
@@ -21,7 +20,8 @@ type BoltStorage struct {
 
 // NewBoltStorage creates the BoltDB storage instance
 func NewBoltStorage(config *Config) (Store, error) {
-	db, err := bolt.Open("ministack.db", 0600, nil)
+	file := fmt.Sprintf("%s.db", config.DbName)
+	db, err := bolt.Open(file, 0600, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -44,13 +44,13 @@ func (s *BoltStorage) CreateQueue(name string) error {
 	log.Printf("Creating queue %s (bucket %s)", name, bucket)
 	return s.db.Update(func(tx *bolt.Tx) error {
 		// Upsert a bucket for the queue
-		_, err := tx.CreateBucketIfNotExists([]byte(bucket))
+		_, err := tx.CreateBucketIfNotExists(bucket)
 		if err != nil {
 			return err
 		}
 		// Update the list of queues
-		sqs := tx.Bucket([]byte(bucketSqs))
-		rawList := sqs.Get([]byte(queueList))
+		sqs := tx.Bucket(bucketSqs)
+		rawList := sqs.Get(queueList)
 		list := QueueList{Queues: map[string]Queue{}}
 		if rawList != nil {
 			err = gob.NewDecoder(bytes.NewReader(rawList)).Decode(&list)
@@ -64,7 +64,7 @@ func (s *BoltStorage) CreateQueue(name string) error {
 		if err != nil {
 			return err
 		}
-		return sqs.Put([]byte(queueList), newRawList.Bytes())
+		return sqs.Put(queueList, newRawList.Bytes())
 	})
 }
 
@@ -73,8 +73,8 @@ func (s *BoltStorage) ListQueues() (QueueList, error) {
 	log.Println("Listing queues")
 	list := QueueList{}
 	err := s.db.View(func(tx *bolt.Tx) error {
-		sqs := tx.Bucket([]byte(bucketSqs))
-		rawList := sqs.Get([]byte(queueList))
+		sqs := tx.Bucket(bucketSqs)
+		rawList := sqs.Get(queueList)
 		if rawList != nil {
 			err := gob.NewDecoder(bytes.NewReader(rawList)).Decode(&list)
 			if err != nil {
@@ -84,24 +84,30 @@ func (s *BoltStorage) ListQueues() (QueueList, error) {
 		return nil
 	})
 	if s.config.Debug {
-		s.debug("Queue List size: %v", list.Keys())
+		s.debug("Queue List: %v", list.Keys())
 	}
 	return list, err
 }
 
 // SendMessage sends a SQS message to the queue
-func (s *BoltStorage) SendMessage(url, body string) (messageID string, err error) {
-	id, err := uuid.NewRandom()
-	if err != nil {
-		return "", err
-	}
-	// TODO: find queue matching URL and store
-	return id.String(), nil
+func (s *BoltStorage) SendMessage(queueName, body string) (messageID string, err error) {
+	var id uint64
+	bucketName := s.toBucketName(queueName)
+	s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(bucketName)
+		if bucket == nil {
+			return fmt.Errorf("Bucket not found: %s", bucketName)
+		}
+		id, _ = bucket.NextSequence()
+		return bucket.Put(uint64ToBytes(id), []byte(body))
+	})
+	messageID = uint64ToUUID(id).String()
+	return messageID, nil
 }
 
 func (s *BoltStorage) initBuckets() error {
 	return s.db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(bucketSqs))
+		_, err := tx.CreateBucketIfNotExists(bucketSqs)
 		if err != nil {
 			return err
 		}
@@ -109,8 +115,8 @@ func (s *BoltStorage) initBuckets() error {
 	})
 }
 
-func (s *BoltStorage) toBucketName(queueName string) string {
-	return fmt.Sprintf("_queue_%s", queueName)
+func (s *BoltStorage) toBucketName(queueName string) []byte {
+	return []byte(fmt.Sprintf("_queue_%s", queueName))
 }
 
 func (s *BoltStorage) debug(msg string, args ...interface{}) {
