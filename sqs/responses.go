@@ -84,7 +84,7 @@ func NewErrorResponse(errType string, errCode string) *ErrorResponse {
 func NewListQueueResponse(config *Config, queues []string) *ListQueuesResponse {
 	queueUrls := []string{}
 	for _, queue := range queues {
-		queueUrls = append(queueUrls, fmt.Sprintf("http://%s:%d/queue/%s", config.Host, config.Port, queue))
+		queueUrls = append(queueUrls, toQueueURL(config, queue))
 	}
 	return &ListQueuesResponse{
 		ListQueuesResult: ListQueuesResult{

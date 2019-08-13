@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"unicode"
 
@@ -103,7 +104,7 @@ func (s *Server) createQueue(c *gin.Context) {
 	}
 	response := CreateQueueResponse{
 		CreateQueueResult: CreateQueueResult{
-			QueueUrl: s.toQueueURL(name),
+			QueueUrl: toQueueURL(s.Config, name),
 		},
 		ResponseMetadata: ResponseMetadata{
 			RequestId: DummyRequestID,
@@ -129,7 +130,7 @@ func (s *Server) getQueueURL(c *gin.Context) {
 	}
 	response := GetQueueUrlResponse{
 		GetQueueUrlResult: GetQueueResult{
-			QueueUrl: s.toQueueURL(name),
+			QueueUrl: toQueueURL(s.Config, name),
 		},
 		ResponseMetadata: ResponseMetadata{
 			RequestId: DummyRequestID,
@@ -179,21 +180,30 @@ func (s *Server) sendMessage(c *gin.Context) {
 		c.XML(http.StatusBadRequest, error)
 		return
 	}
-	url := c.Query("QueueUrl")
-	if len(url) == 0 {
+	queueURLStr := c.Query("QueueUrl")
+	if len(queueURLStr) == 0 {
 		error := NewErrorResponse("Sender", "Invalid request: MissingQueryParamRejection(QueueUrl)")
+		c.XML(http.StatusBadRequest, error)
+		return
+	}
+	queueURL, err := url.Parse(queueURLStr)
+	pathParts := strings.Split(queueURL.Path, "/")
+	fmt.Println()
+	if err != nil || len(pathParts) != 2 || queueURL.Hostname() != s.Config.Host || pathParts[0] != "queues" {
+		error := NewErrorResponse("AWS.SimpleQueueService.UnsupportedOperation", fmt.Sprintf("Invalid url %s", queueURLStr))
 		c.XML(http.StatusBadRequest, error)
 		return
 	}
 	for idx, ch := range body {
 		// #x9 | #xA | #xD | #x20 to #xD7FF | #xE000 to #xFFFD | #x10000 to #x10FFFF
 		if !(ch == 0x09 || ch == 0xA || ch == 0xD || (ch >= 0x20 && ch <= 0xD7FF) || (ch >= 0x10000 && ch <= 0x10FFFF)) {
-			error := NewErrorResponse("InvalidMessageContents", fmt.Sprintf("Invalid character %x at index %d", c, idx))
+			error := NewErrorResponse("InvalidMessageContents", fmt.Sprintf("Invalid character %x at index %d", ch, idx))
 			c.XML(http.StatusBadRequest, error)
 			return
 		}
 	}
-	messageID, err := s.Store.SendMessage(url, body)
+
+	messageID, err := s.Store.SendMessage(pathParts[1], body)
 	if err != nil {
 		c.XML(http.StatusInternalServerError, NewErrorResponse("Sender", err.Error()))
 		return
@@ -203,7 +213,7 @@ func (s *Server) sendMessage(c *gin.Context) {
 	response := SendMessageResponse{
 		SendMessageResult: SendMessageResult{
 			MD5OfMessageBody:       fmt.Sprintf("%x", bodyMd5),
-			MD5OfMessageAttributes: fmt.Sprintf("%x", "TODO"), // TODO
+			MD5OfMessageAttributes: fmt.Sprintf("%x", "TODO"), // TODO attributes MD5
 			MessageID:              messageID,
 		},
 		ResponseMetadata: ResponseMetadata{
@@ -232,6 +242,6 @@ func (s *Server) validateQueuName(name string) error {
 	return nil
 }
 
-func (s *Server) toQueueURL(queueName string) string {
-	return fmt.Sprintf("http://%s:%d/queue/%s", s.Config.Host, s.Config.Port, queueName)
+func toQueueURL(config *Config, queueName string) string {
+	return fmt.Sprintf("http://%s:%d/queues/%s", config.Host, config.Port, queueName)
 }
