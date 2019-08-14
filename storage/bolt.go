@@ -2,11 +2,13 @@ package storage
 
 import (
 	"bytes"
-	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/boltdb/bolt"
+	"github.com/google/uuid"
 )
 
 var bucketSqs = []byte("sqs")
@@ -40,27 +42,31 @@ func (s *BoltStorage) Close() {
 
 // CreateQueue creates a new SQS queue
 func (s *BoltStorage) CreateQueue(name string) error {
-	bucket := s.toBucketName(name)
-	log.Printf("Creating queue %s (bucket %s)", name, bucket)
+	bucketName := s.queueBucket(name)
+	log.Printf("Creating queue %s (bucket %s)", name, bucketName)
 	return s.db.Update(func(tx *bolt.Tx) error {
+		sqs := tx.Bucket(bucketSqs)
 		// Upsert a bucket for the queue
-		_, err := tx.CreateBucketIfNotExists(bucket)
+		_, err := sqs.CreateBucketIfNotExists(bucketName)
+		if err != nil {
+			return err
+		}
+		_, err = sqs.CreateBucketIfNotExists(s.queueUUIDIndexBucket(name))
 		if err != nil {
 			return err
 		}
 		// Update the list of queues
-		sqs := tx.Bucket(bucketSqs)
 		rawList := sqs.Get(queueList)
 		list := QueueList{Queues: map[string]Queue{}}
 		if rawList != nil {
-			err = gob.NewDecoder(bytes.NewReader(rawList)).Decode(&list)
+			err = json.NewDecoder(bytes.NewReader(rawList)).Decode(&list)
 			if err != nil {
 				return err
 			}
 		}
 		list.Queues[name] = Queue{name}
 		var newRawList bytes.Buffer
-		err = gob.NewEncoder(&newRawList).Encode(list)
+		err = json.NewEncoder(&newRawList).Encode(list)
 		if err != nil {
 			return err
 		}
@@ -76,7 +82,7 @@ func (s *BoltStorage) ListQueues() (QueueList, error) {
 		sqs := tx.Bucket(bucketSqs)
 		rawList := sqs.Get(queueList)
 		if rawList != nil {
-			err := gob.NewDecoder(bytes.NewReader(rawList)).Decode(&list)
+			err := json.NewDecoder(bytes.NewReader(rawList)).Decode(&list)
 			if err != nil {
 				return err
 			}
@@ -91,18 +97,61 @@ func (s *BoltStorage) ListQueues() (QueueList, error) {
 
 // SendMessage sends a SQS message to the queue
 func (s *BoltStorage) SendMessage(queueName, body string) (messageID string, err error) {
-	var id uint64
-	bucketName := s.toBucketName(queueName)
-	s.db.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(bucketName)
+	var sequence uint64
+	bucketName := s.queueBucket(queueName)
+	uuidIndexbucketName := s.queueUUIDIndexBucket(queueName)
+	err = s.db.Update(func(tx *bolt.Tx) error {
+		sqs := tx.Bucket(bucketSqs)
+		bucket := sqs.Bucket(bucketName)
 		if bucket == nil {
 			return fmt.Errorf("Bucket not found: %s", bucketName)
 		}
-		id, _ = bucket.NextSequence()
-		return bucket.Put(uint64ToBytes(id), []byte(body))
+		sequence, _ = bucket.NextSequence()
+		return nil
 	})
-	messageID = uint64ToUUID(id).String()
-	return messageID, nil
+	if err != nil {
+		return "", err
+	}
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return "", err
+	}
+	now := time.Now().Unix()
+	payload := MessagePayload{
+		UUID:       id.String(),
+		SequenceID: sequence,
+		CreatedAt:  now,
+		Payload:    body,
+	}
+	var payloadJSON bytes.Buffer
+	err = json.NewEncoder(&payloadJSON).Encode(payload)
+	if err != nil {
+		return "", err
+	}
+	payloadKey := PayloadKey{
+		Sequence:  sequence,
+		Timestamp: now,
+	}
+	err = s.db.Update(func(tx *bolt.Tx) error {
+		sqs := tx.Bucket(bucketSqs)
+		bucket := sqs.Bucket(bucketName)
+		if bucket == nil {
+			return fmt.Errorf("Bucket not found: %s", bucketName)
+		}
+		err = bucket.Put([]byte(payloadKey.String()), payloadJSON.Bytes())
+		if err != nil {
+			return err
+		}
+		uuidIndexBucket := sqs.Bucket(uuidIndexbucketName)
+		if uuidIndexBucket == nil {
+			return fmt.Errorf("Bucket not found: %s", uuidIndexbucketName)
+		}
+		return uuidIndexBucket.Put([]byte(id.String()), []byte(payloadKey.String()))
+	})
+	if err != nil {
+		return "", err
+	}
+	return id.String(), nil
 }
 
 func (s *BoltStorage) initBuckets() error {
@@ -115,8 +164,13 @@ func (s *BoltStorage) initBuckets() error {
 	})
 }
 
-func (s *BoltStorage) toBucketName(queueName string) []byte {
-	return []byte(fmt.Sprintf("_queue_%s", queueName))
+func (s *BoltStorage) queueBucket(queueName string) []byte {
+	return []byte(fmt.Sprintf("_queue:%s", queueName))
+}
+
+// UUID to payloadKey "index"
+func (s *BoltStorage) queueUUIDIndexBucket(queueName string) []byte {
+	return []byte(fmt.Sprintf("_queue_uuid_idx:%s", queueName))
 }
 
 func (s *BoltStorage) debug(msg string, args ...interface{}) {
