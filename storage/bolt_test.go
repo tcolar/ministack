@@ -24,7 +24,7 @@ func TestMain(m *testing.M) {
 	}
 	defer store.Close()
 	result := m.Run()
-	os.Remove(file)
+	// os.Remove(file)
 	os.Exit(result)
 }
 
@@ -72,4 +72,11 @@ func TestQueues(t *testing.T) {
 		t.Errorf("Queue 2 should be named queue2")
 	}
 	store.SendMessage("queue2", "This is a test")
+	store.SendMessage("queue2", "This is another test")
+
+	queues, err = store.ListQueues()
+	fmt.Println(queues.Keys())
+	if err != nil {
+		t.Error(err)
+	}
 }

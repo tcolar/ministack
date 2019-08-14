@@ -117,20 +117,20 @@ func (s *BoltStorage) SendMessage(queueName, body string) (messageID string, err
 		return "", err
 	}
 	now := time.Now().Unix()
-	payload := MessagePayload{
-		UUID:       id.String(),
-		SequenceID: sequence,
-		CreatedAt:  now,
-		Payload:    body,
+	payloadKey := &PayloadKey{
+		Sequence:     sequence,
+		VisibleAfter: now, // TODO: Add delay if queue has one setup
+	}
+	payload := &MessagePayload{
+		UUID:      id.String(),
+		CreatedAt: now,
+		Payload:   body,
+		Key:       payloadKey.String(),
 	}
 	var payloadJSON bytes.Buffer
 	err = json.NewEncoder(&payloadJSON).Encode(payload)
 	if err != nil {
 		return "", err
-	}
-	payloadKey := PayloadKey{
-		Sequence:  sequence,
-		Timestamp: now,
 	}
 	err = s.db.Update(func(tx *bolt.Tx) error {
 		sqs := tx.Bucket(bucketSqs)
