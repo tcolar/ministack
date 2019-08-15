@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -32,6 +31,10 @@ func NewBoltStorage(config *Config) (Store, error) {
 		config: config,
 	}
 	err = store.initBuckets()
+
+	// TODO: job to delete messages after a certain time
+	// TODO: job to flush invisible messages
+
 	return store, err
 }
 
@@ -43,7 +46,7 @@ func (s *BoltStorage) Close() {
 // CreateQueue creates a new SQS queue
 func (s *BoltStorage) CreateQueue(name string) error {
 	bucketName := s.queueBucket(name)
-	log.Printf("Creating queue %s (bucket %s)", name, bucketName)
+	s.debug("Creating queue %s (bucket %s)", name, bucketName)
 	return s.db.Update(func(tx *bolt.Tx) error {
 		sqs := tx.Bucket(bucketSqs)
 		// Upsert a bucket for the queue
@@ -59,44 +62,84 @@ func (s *BoltStorage) CreateQueue(name string) error {
 		rawList := sqs.Get(queueList)
 		list := QueueList{Queues: map[string]Queue{}}
 		if rawList != nil {
-			err = json.NewDecoder(bytes.NewReader(rawList)).Decode(&list)
+			err = s.decode(rawList, &list)
 			if err != nil {
 				return err
 			}
 		}
 		list.Queues[name] = Queue{name}
-		var newRawList bytes.Buffer
-		err = json.NewEncoder(&newRawList).Encode(list)
+		newRawList, err := s.encode(list)
 		if err != nil {
 			return err
 		}
-		return sqs.Put(queueList, newRawList.Bytes())
+		return sqs.Put(queueList, newRawList)
 	})
 }
 
 // ListQueues lists the SQS queues
 func (s *BoltStorage) ListQueues() (QueueList, error) {
-	log.Println("Listing queues")
+	s.debug("Listing queues")
 	list := QueueList{}
 	err := s.db.View(func(tx *bolt.Tx) error {
 		sqs := tx.Bucket(bucketSqs)
 		rawList := sqs.Get(queueList)
 		if rawList != nil {
-			err := json.NewDecoder(bytes.NewReader(rawList)).Decode(&list)
+			err := s.decode(rawList, &list)
 			if err != nil {
 				return err
 			}
 		}
 		return nil
 	})
-	if s.config.Debug {
-		s.debug("Queue List: %v", list.Keys())
-	}
+	s.debug("Queue List: %v", list.Keys())
 	return list, err
+}
+
+// ReceiveMessage receives messages from the queue
+func (s *BoltStorage) ReceiveMessage(queueName string, maxMessages int, visibilityTimeoutSeconds int) ([]string, error) {
+	s.debug("Receive messages from %s", queueName)
+	messages := []string{}
+	bucketName := s.queueBucket(queueName)
+	uuidIndexbucketName := s.queueUUIDIndexBucket(queueName)
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		sqs := tx.Bucket(bucketSqs)
+		queueBucket := sqs.Bucket(bucketName)
+		if queueBucket == nil {
+			return fmt.Errorf("Bucket not found for %s", queueName)
+		}
+		uuidIndexBucket := sqs.Bucket(uuidIndexbucketName)
+		if uuidIndexBucket == nil {
+			return fmt.Errorf("Bucket not found: %s", uuidIndexbucketName)
+		}
+		now := time.Now().Unix()
+		cursor := queueBucket.Cursor()
+		for key, payload := cursor.First(); key != nil && len(messages) < maxMessages; key, payload = cursor.Next() {
+			if ParsePayloadKey(key).VisibleAfter > now {
+				break // We reached a message that is not visible yet, since it's sorted, we are done.
+			}
+			var message MessagePayload
+			s.decode(payload, &message)
+			messages = append(messages, string(payload))
+			if visibilityTimeoutSeconds > 0 {
+				// Make the message invisible for a while by updating it's timestamp based key
+				newKey := ParsePayloadKey(key).ExtendInvisibility(visibilityTimeoutSeconds)
+				queueBucket.Put(newKey.Bytes(), payload)
+				queueBucket.Delete(key)
+				uuidIndexBucket.Put([]byte(message.UUID), newKey.Bytes())
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.debug("Received %d messages from %s", len(messages), queueName)
+	return messages, nil
 }
 
 // SendMessage sends a SQS message to the queue
 func (s *BoltStorage) SendMessage(queueName, body string) (messageID string, err error) {
+	s.debug("Send message to %s with body size: %d", queueName, len(body))
 	var sequence uint64
 	bucketName := s.queueBucket(queueName)
 	uuidIndexbucketName := s.queueUUIDIndexBucket(queueName)
@@ -117,18 +160,16 @@ func (s *BoltStorage) SendMessage(queueName, body string) (messageID string, err
 		return "", err
 	}
 	now := time.Now().Unix()
-	payloadKey := &PayloadKey{
+	payloadKey := PayloadKey{
 		Sequence:     sequence,
 		VisibleAfter: now, // TODO: Add delay if queue has one setup
-	}
+	}.Bytes()
 	payload := &MessagePayload{
 		UUID:      id.String(),
 		CreatedAt: now,
 		Payload:   body,
-		Key:       payloadKey.String(),
 	}
-	var payloadJSON bytes.Buffer
-	err = json.NewEncoder(&payloadJSON).Encode(payload)
+	payloadBytes, err := s.encode(payload)
 	if err != nil {
 		return "", err
 	}
@@ -138,7 +179,7 @@ func (s *BoltStorage) SendMessage(queueName, body string) (messageID string, err
 		if bucket == nil {
 			return fmt.Errorf("Bucket not found: %s", bucketName)
 		}
-		err = bucket.Put([]byte(payloadKey.String()), payloadJSON.Bytes())
+		err = bucket.Put([]byte(payloadKey), payloadBytes)
 		if err != nil {
 			return err
 		}
@@ -146,7 +187,7 @@ func (s *BoltStorage) SendMessage(queueName, body string) (messageID string, err
 		if uuidIndexBucket == nil {
 			return fmt.Errorf("Bucket not found: %s", uuidIndexbucketName)
 		}
-		return uuidIndexBucket.Put([]byte(id.String()), []byte(payloadKey.String()))
+		return uuidIndexBucket.Put([]byte(id.String()), []byte(payloadKey))
 	})
 	if err != nil {
 		return "", err
@@ -177,4 +218,13 @@ func (s *BoltStorage) debug(msg string, args ...interface{}) {
 	if s.config.Debug {
 		log.Printf("DEBUG: %s", fmt.Sprintf(msg, args...))
 	}
+}
+
+// Use JSON for redability, but could swicth to something faster such as gob
+func (s *BoltStorage) encode(v interface{}) ([]byte, error) {
+	return json.Marshal(v)
+}
+
+func (s *BoltStorage) decode(payload []byte, v interface{}) error {
+	return json.Unmarshal(payload, v)
 }
