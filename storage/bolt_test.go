@@ -29,18 +29,18 @@ func TestMain(m *testing.M) {
 }
 
 func TestQueues(t *testing.T) {
-	queues, err := store.ListQueues()
+	queues, err := store.SqsListQueues()
 	if err != nil {
 		t.Error(err)
 	}
 	if len(queues.Queues) != 0 {
 		t.Errorf("Expected 0 queues")
 	}
-	err = store.CreateQueue("queue1")
+	err = store.SqsCreateQueue("queue1")
 	if err != nil {
 		t.Error(err)
 	}
-	queues, err = store.ListQueues()
+	queues, err = store.SqsListQueues()
 	fmt.Println(queues)
 	if err != nil {
 		t.Error(err)
@@ -48,11 +48,11 @@ func TestQueues(t *testing.T) {
 	if len(queues.Queues) != 1 {
 		t.Errorf("Expected 1 queues")
 	}
-	err = store.CreateQueue("queue2")
+	err = store.SqsCreateQueue("queue2")
 	if err != nil {
 		t.Error(err)
 	}
-	queues, err = store.ListQueues()
+	queues, err = store.SqsListQueues()
 	fmt.Println(queues.Keys())
 	if err != nil {
 		t.Error(err)
@@ -71,12 +71,28 @@ func TestQueues(t *testing.T) {
 	if queue2.Name != "queue2" {
 		t.Errorf("Queue 2 should be named queue2")
 	}
-	store.SendMessage("queue2", "This is a test")
-	store.SendMessage("queue2", "This is another test")
+	store.SqsSendMessage("queue2", "This is a test")
+	store.SqsSendMessage("queue2", "This is another test")
 
-	queues, err = store.ListQueues()
+	queues, err = store.SqsListQueues()
 	fmt.Println(queues.Keys())
 	if err != nil {
 		t.Error(err)
 	}
+
+	msg, err := store.SqsReceiveMessage("queue2", 1, 30)
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(msg)
+	msg, err = store.SqsReceiveMessage("queue2", 1, 30)
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(msg)
+	msg, err = store.SqsReceiveMessage("queue2", 1, 30)
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(msg)
 }

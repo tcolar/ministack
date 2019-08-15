@@ -4,12 +4,12 @@ package storage
 type Store interface {
 	// Close should be called upon program termination
 	Close()
-	// CreateQueue creates a new SQS queue
-	CreateQueue(name string) error
-	// ListQueues lists the SQS queues
-	ListQueues() (QueueList, error)
-	// ReceiveMessage receives messages from the queue
-	ReceiveMessage(queueName string, maxMessages int, visibilityTimeout int) ([]string, error)
-	// Send SQS Message
-	SendMessage(queueName, body string) (messageID string, err error)
+	// SqsCreateQueue creates a new SQS queue
+	SqsCreateQueue(name string) error
+	// SqsListQueues lists the SQS queues
+	SqsListQueues() (QueueList, error)
+	// SqsReceiveMessage receives messages from the queue
+	SqsReceiveMessage(queueName string, maxMessages int, visibilityTimeout int) ([]string, error)
+	// SqsSendMessage SQS Message
+	SqsSendMessage(queueName, body string) (messageID string, err error)
 }
